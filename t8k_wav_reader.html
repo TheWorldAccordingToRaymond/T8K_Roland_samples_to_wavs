@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<META content="text/html; charset=ISO-8859-2" http-equiv="content-type">
+		<title>Extract SMPL from a t8k or t8p file, add wav header and Play it</title>
+		<style>
+		button {
+			margin: 4px;
+			border-radius: 4px;
+		}
+		</style>
+	</head>
+	
+	<body onload="init();">
+		<div id="main">
+			
+			<h1>Extract Roland TR-8S SMPL from a t8k or t8p file, add wav header and Play it</h1>
+			<p>
+			</p>
+			<form name="frmConvert" action="">
+				<p>
+					Files:
+					<input type = "file" name = "fileinput" multiple = "" onchange = 'openFiles(event)' />
+				</p>
+			</form>
+			<div id="buttons">
+			
+			</div>
+			<p>Infos:</p>
+			<p>
+				<textarea id="ed_output" rows="25" cols="87" style="width: 700px;"></textarea>
+				<br>
+			</p>
+		</div>
+			
+		<script type="text/javascript">
+			
+			var uint8View;
+			var finalText="";
+			var nb_tones=0;
+			var arrayWav=[[]];
+			
+			var nb_smpl_founded=0;
+			
+			function init(){
+				document.forms[0].reset();
+				document.getElementById('ed_output').value = '';
+			}
+			
+			function toBytesInt32_Uint8 (num) {
+				arr = new Uint8Array([
+					(num & 0x000000ff),
+					(num & 0x0000ff00) >> 8,
+					(num & 0x00ff0000) >> 16,
+					(num & 0xff000000) >> 24
+				]);
+				return arr;
+			}
+			
+			function toBytesInt32 (num) {
+				arr = [
+					(num & 0x000000ff),
+					(num & 0x0000ff00) >> 8,
+					(num & 0x00ff0000) >> 16,
+					(num & 0xff000000) >> 24
+				];
+				return arr;
+			}
+
+			function push_one_by_one(array_r,array_s) {
+				for (var i = 0; i < array_s.length ; i++ ) {
+					array_r.push(array_s[i]);
+				}
+			}
+			
+			function createAndDownloadBlobFile(body, filename, extension ) {
+				const blob = new Blob([body]);
+				const fileName = filename + "." + extension;
+				if (navigator.msSaveBlob) {
+					// IE 10+
+					navigator.msSaveBlob(blob, fileName);
+					} else {
+					const link = document.createElement('a');
+					// Browsers that support HTML5 download attribute
+					if (link.download !== undefined) {
+						const url = URL.createObjectURL(blob);
+						link.setAttribute('href', url);
+						link.setAttribute('download', fileName);
+						link.style.visibility = 'hidden';
+						document.body.appendChild(link);
+						link.click();
+						document.body.removeChild(link);
+					}
+				}
+			}
+			
+			function DoTheJob(processed_filename) {
+				document.getElementById('ed_output').value = '';
+				let context = new AudioContext();
+				
+				for (let i = 0; i < uint8View.length ; i+=1 ) {
+				
+					if (uint8View[i]==0x54  && uint8View[i+1]==0x4f && uint8View[i+2]==0x4e && uint8View[i+3]==0x45 ) {
+						//TONE_found_at=i;//TONE 54 4F 4E 45
+						nb_tones=uint8View[i+0x10];
+						finalText+=nb_tones.toString() + " Tones name found:\n";
+						for (let j = 0; j < nb_tones ; j++) {
+							var index_from=i+0x20+(j*0x24);
+							var name_txt_bytes=uint8View.slice(index_from,index_from+16);
+							var name_txt_str='';
+							for (n in name_txt_bytes){
+								if (name_txt_bytes[n]!=0) name_txt_str+=String.fromCharCode(name_txt_bytes[n]);
+							}
+							finalText+=name_txt_str + "\n";
+						}
+						finalText+= "\n";
+					}
+					
+					if (uint8View[i]==0x50  && uint8View[i+1]==0x43 && uint8View[i+2]==0x4d && uint8View[i+3]==0x54 ) {
+						//PCMT 50 43 4D 54
+						var nb_pcmt=uint8View[i+0x10];
+						finalText+=nb_pcmt.toString() + " pcmt found:\n";
+						for (let j = 0; j < nb_pcmt ; j++) {
+							var index_from=i+0x38+(j*0x40);
+							var SampleRate_bytes=uint8View.slice(index_from,index_from+4);
+							var SampleRate= SampleRate_bytes[0]  + SampleRate_bytes[1]*0x100 + SampleRate_bytes[2]*0x10000 + SampleRate_bytes[3]*0x1000000;
+							finalText+="SampleRate " + (j+1).toString() + " = "+SampleRate.toString() + "\n";
+						}
+						finalText+= "\n";
+					}
+					if (uint8View[i]==0x53  && uint8View[i+1]==0x4D  && uint8View[i+2]==0x50  && uint8View[i+3]==0x4C ){
+						let SMPL_buf = [];
+						let SMPL_size=0;
+						SMPL_size= uint8View[i+4]  + uint8View[i+5]*0x100 + uint8View[i+6]*0x10000 + uint8View[i+7]*0x1000000;
+						for (var index = i+0x10; index < i+0x10+SMPL_size; index++)  SMPL_buf.push(uint8View[index]);
+						
+						nb_smpl_founded++;
+						//reconstruct wav
+						var header_wav_RIFF=[0x52,0x49,0x46,0x46];//('RIFF');
+						var header_wav_end = [0x57,0x41,0x56,0x45,0x66,0x6D,0x74,0x20,0x10,0x00,0x00,0x00,0x01,0x00,0x01,0x00,0x44,0xAC,0x00,0x00,0x88,0x58,0x01,0x00,0x02,0x00,0x10,0x00,0x64,0x61,0x74,0x61];//(end by 'data');
+						
+						var wav_size=[];
+						wav_size=toBytesInt32(SMPL_size+0x20);
+						arrayWav[nb_smpl_founded-1]=header_wav_RIFF.concat(wav_size,header_wav_end,SMPL_buf);
+						
+						//create button
+						var element = document.createElement("button");
+						element.innerHTML = "Play SMPL " + nb_smpl_founded.toString();
+						let n = (nb_smpl_founded-1).valueOf();
+						element.onclick = function () {play(n)};
+						var btnDiv = document.getElementById("buttons");
+						btnDiv.appendChild(element);
+						
+						finalText+= "SMPL " + nb_smpl_founded.toString() + " size = " + SMPL_size + "\n";
+						
+					}
+				}
+				document.getElementById('ed_output').value =  finalText + "\n";
+			}
+						
+			// Play the loaded file
+			function play(x) {
+				var arrayBuffer = new ArrayBuffer(arrayWav[x].length);//reserve buffer memory
+				var bufferView = new Uint8Array(arrayBuffer);
+				for (j = 0; j < arrayWav[x].length; j++) {
+					bufferView[j] = arrayWav[x][j];//to  fill buffer memory
+				}
+				let context = new AudioContext();
+				context.decodeAudioData(arrayBuffer, function(buffer) {
+				buf = buffer;
+				//play();
+				var source = context.createBufferSource();
+				source.buffer = buf;
+				// Connect to the final output node (the speakers)
+				source.connect(context.destination);
+				// Play immediately
+				source.start(0);
+				});
+			}
+			
+			function readFileAsArray(file) {
+				var reader = new FileReader();
+				reader.onload = function() {
+					//var text = reader.result;
+					var arr = reader.result;
+					uint8View = new Uint8Array(arr);
+					var text= DoTheJob(file.name);
+				};
+				reader.readAsArrayBuffer(file);
+			}
+			
+			var openFiles = function(event) {
+				var input = event.target;
+				for ( var i = 0; i < input.files.length; i++ ){
+					var text= readFileAsArray(input.files[i]);
+					if (i < input.files.length-1) confirm("Next file");
+				}
+			};
+		
+		</script>
+		
+	</body>
+</html>
+				
