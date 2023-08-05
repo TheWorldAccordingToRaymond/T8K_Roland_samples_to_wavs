@@ -47,9 +47,9 @@ with open(sys.argv[1], "rb") as binary_file:
             #Next four bytes after data the length is the crc32 of datas
             #Next four bytes after crc32 of datas is the crc32 of the 12 above bytes
             # Go to beginning datas
-            binary_file.seek(i+0x10)
+            binary_file.seek(i+0x4)
             # Read the size of image plus the keyword
-            smpl_data = binary_file.read(smpl_size)
+            smpl_data = binary_file.read(smpl_size+0x4) # +0x4 to get smpl size bytes
             
             #Save samples files
             '''
@@ -73,7 +73,7 @@ with open(sys.argv[1], "rb") as binary_file:
             with open("wavs/" + wave_name + ".wav", "wb") as outfile:
                 print("Create wav file: wavs/" + wave_name + ".wav")
                 outfile.write(header_wav_RIFF)
-                outfile.write((smpl_size+0x20).to_bytes(4, byteorder = 'little'))
+                outfile.write((smpl_size+0x24).to_bytes(4, byteorder = 'little'))
                 outfile.write(header_wav_end)
                 outfile.write(smpl_data)
             smpl_count+= 1
