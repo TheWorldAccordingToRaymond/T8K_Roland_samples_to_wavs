@@ -87,6 +87,9 @@
 			}
 			
 			function DoTheJob(processed_filename) {
+			
+				let header_wav_RIFF=[0x52,0x49,0x46,0x46];//('RIFF');
+				let header_wav_end = [0x57,0x41,0x56,0x45,0x66,0x6D,0x74,0x20,0x10,0x00,0x00,0x00,0x01,0x00,0x01,0x00,0x44,0xAC,0x00,0x00,0x88,0x58,0x01,0x00,0x02,0x00,0x10,0x00,0x64,0x61,0x74,0x61];//(end by 'data');
 				let finalText="";
 				document.getElementById('ed_output').value = '';
 				let context = new AudioContext();
@@ -126,16 +129,13 @@
 						let SMPL_buf = [];
 						let SMPL_size=0;
 						SMPL_size= uint8View[i+4]  + uint8View[i+5]*0x100 + uint8View[i+6]*0x10000 + uint8View[i+7]*0x1000000;
-						for (let index = i+0x10; index < i+0x10+SMPL_size; index++)  SMPL_buf.push(uint8View[index]);
+						for (let index = i+0x4; index < i+0x4+0x4+SMPL_size; index++)  SMPL_buf.push(uint8View[index]);
 						
 						nb_smpl_founded++;
 						//reconstruct wav
-						let header_wav_RIFF=[0x52,0x49,0x46,0x46];//('RIFF');
-						let header_wav_end = [0x57,0x41,0x56,0x45,0x66,0x6D,0x74,0x20,0x10,0x00,0x00,0x00,0x01,0x00,0x01,0x00,0x44,0xAC,0x00,0x00,0x88,0x58,0x01,0x00,0x02,0x00,0x10,0x00,0x64,0x61,0x74,0x61];//(end by 'data');
-						
-						let wav_size=[];
-						wav_size=toBytesInt32(SMPL_size+0x20);
-						arrayWav[nb_smpl_founded-1]=header_wav_RIFF.concat(wav_size,header_wav_end,SMPL_buf);
+						let wav_size_buf=[];
+						wav_size_buf=toBytesInt32(SMPL_size+0x24);
+						arrayWav[nb_smpl_founded-1]=header_wav_RIFF.concat(wav_size_buf,header_wav_end,SMPL_buf);
 						
 						//create button
 						let element = document.createElement("button");
@@ -151,15 +151,18 @@
 					}
 				}
 				
-				document.getElementById('ed_output').value =  finalText + "\n";
-				//create button Save All .wav files
-				let btnDiv = document.getElementById("buttons");
-				let lineBreak = document.createElement('br');
-				btnDiv.appendChild(lineBreak);
-				let element = document.createElement("button");
-				element.innerHTML = "Save All .wav files" ;
-				element.onclick = function () {savealls()};
-				btnDiv.appendChild(element);
+
+				if (nb_smpl_founded>0){
+					document.getElementById('ed_output').value =  finalText + "\n";
+					//create button Save All .wav files
+					let btnDiv = document.getElementById("buttons");
+					let lineBreak = document.createElement('br');
+					btnDiv.appendChild(lineBreak);
+					let element = document.createElement("button");
+					element.innerHTML = "Save All .wav files" ;
+					element.onclick = function () {savealls()};
+					btnDiv.appendChild(element);
+				} else 	document.getElementById('ed_output').value =  finalText + "\nNo SMPL found\n";
 			}
 						
 			// Play the loaded file
